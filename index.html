@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="SM SERVICE">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>SM SERVICE - Control de Saldos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- librería para exportar a Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #tarja-print, #tarja-print * { visibility: visible; }
+      #tarja-print { position: absolute; left: 0; top: 0; width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans pb-10 select-none">
+
+  <div class="max-w-5xl mx-auto p-3 sm:p-6">
+    <header class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 no-print text-center">
+      <div id="offline-status" class="mb-2 text-[10px] font-bold rounded-full px-2 py-1 inline-block bg-emerald-100 text-emerald-700">● MODO OFFLINE LISTO</div>
+      <span class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">FRIGORÍFICO SM SERVICE</span>
+      <h1 class="text-xl font-black text-slate-900">Control de Saldos Multi-Productor</h1>
+      
+      <div class="grid grid-cols-2 gap-2 mt-3 p-2 bg-slate-50 rounded-lg text-[11px] font-bold border">
+        <div class="text-slate-600">Auto Folio Pallet (20261): <span id="info-folios-nuevo" class="text-blue-600 font-black">5000</span> disp.</div>
+        <div class="text-slate-600">Auto Folio Saldo (RP): <span id="info-folios-saldo" class="text-emerald-600 font-black">5000</span> disp.</div>
+      </div>
+
+      <div class="flex flex-wrap justify-center gap-1.5 mt-3">
+        <button onclick="switchTab('ingreso')" id="btn-ingreso" class="tab-btn px-3 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white">1. Ingreso</button>
+        <button onclick="switchTab('mapa')" id="btn-mapa" class="tab-btn px-3 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600">2. Mapa</button>
+        <button onclick="switchTab('repa')" id="btn-repa" class="tab-btn px-3 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600">3. Repaletizaje</button>
+        <button onclick="switchTab('inv')" id="btn-inv" class="tab-btn px-3 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600">4. Inventario y Reportes</button>
+        <button onclick="clearAllData()" class="px-2.5 py-2 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold" title="Reiniciar datos">🗑️</button>
+      </div>
+    </header>
+
+    <!-- TAB 1: INGRESO -->
+    <div id="tab-ingreso" class="tab-content bg-white p-4 rounded-xl shadow-sm border border-slate-200 no-print">
+      <h2 class="text-base font-bold mb-3 border-b pb-2">Ingresar Nuevo Pallet</h2>
+      <form onsubmit="guardarIngreso(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">Código Folio (10 caracteres exactos) (*)</label>
+          <input type="text" maxlength="10" minlength="10" id="ing-codigo" placeholder="Ingresa 10 caracteres" oninput="this.value = this.value.toUpperCase()" class="w-full border rounded-lg p-2.5 text-sm font-bold bg-slate-50 uppercase" required>
+        </div>
+
+        <div class="border rounded-lg p-3 bg-slate-50/50 space-y-2">
+          <div class="flex justify-between items-center border-b pb-2">
+            <label class="text-xs font-bold text-slate-700">Productores (Sólo Números) y Cajas (*)</label>
+            <button type="button" onclick="agregarFilaProductorIngreso()" class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200">+ Agregar Productor</button>
+          </div>
+          <div id="contenedor-productores-ingreso" class="space-y-2"></div>
+          <div class="text-right text-xs font-black text-blue-900 border-t pt-1">
+            Total Cajas Pallet: <span id="ing-total-cajas">0</span> cj
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Cámara (*)</label>
+            <select id="ing-camara" class="w-full border rounded-lg p-2 text-xs bg-white"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Posición (*)</label>
+            <select id="ing-posicion" class="w-full border rounded-lg p-2 text-xs bg-white"></select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Calibre</label>
+            <input type="text" id="ing-calibre" placeholder="Ej: 100" oninput="this.value = this.value.toUpperCase()" class="w-full border rounded-lg p-2 text-xs bg-slate-50 uppercase">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Envase</label>
+            <input type="text" id="ing-envase" placeholder="Ej: Bushel" oninput="this.value = this.value.toUpperCase()" class="w-full border rounded-lg p-2 text-xs bg-slate-50 uppercase">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Variedad</label>
+            <input type="text" id="ing-variedad" placeholder="Ej: Gala" oninput="this.value = this.value.toUpperCase()" class="w-full border rounded-lg p-2 text-xs bg-slate-50 uppercase">
+          </div>
+        </div>
+        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg text-sm shadow hover:bg-blue-700">Guardar Pallet Origen</button>
+      </form>
+    </div>
+
+    <!-- TAB 2: MAPA -->
+    <div id="tab-mapa" class="tab-content hidden bg-white p-4 rounded-xl shadow-sm border border-slate-200 no-print">
+      <div class="flex flex-wrap justify-between items-center gap-2 mb-4 border-b pb-3">
+        <div id="camaras-selector" class="flex gap-1"></div>
+      </div>
+      <div id="grid-mapa" class="grid grid-cols-3 sm:grid-cols-6 gap-1.5"></div>
+    </div>
+
+    <!-- TAB 3: REPALETIZAJE -->
+    <div id="tab-repa" class="tab-content hidden space-y-4 no-print">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-sm font-bold border-b pb-2 mb-3">1. Seleccionar Folios y Productores Origen</h2>
+        
+        <!-- BUSCADOR -->
+        <div class="mb-3">
+          <input type="text" id="buscar-folio-origen" placeholder="🔍 Buscar por código de Folio Origen..." oninput="filtrarFoliosOrigen()" class="w-full border border-slate-300 rounded-lg p-2 text-xs bg-slate-50 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+
+        <div id="lista-origenes" class="space-y-2 max-h-80 overflow-y-auto pr-1 text-xs"></div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-sm font-bold border-b pb-2 mb-2">2. Resumen y Destino (Generado de Selección)</h2>
+        <form onsubmit="procesarRepaletizaje(event)" class="space-y-3 text-xs">
+          <div>
+            <div class="flex flex-wrap justify-between items-center gap-1 mb-1">
+              <label class="font-bold text-slate-600">Código Destino (10 caracteres) (*)</label>
+              <div class="flex gap-2">
+                <button type="button" onclick="generarAutoFolioNuevo()" class="text-blue-600 font-extrabold hover:underline">⚡ Auto Pallet Completo (20261)</button>
+                <button type="button" onclick="generarAutoFolioSaldo()" class="text-emerald-600 font-extrabold hover:underline">⚡ Auto Saldo (RP)</button>
+              </div>
+            </div>
+            <input type="text" maxlength="10" minlength="10" id="repa-codigo" placeholder="Ej: 2026100001 o RP00000001" oninput="this.value = this.value.toUpperCase()" class="w-full border rounded-lg p-2.5 text-sm font-bold text-slate-900 bg-slate-50 uppercase" required>
+          </div>
+
+          <div class="border rounded-lg p-3 bg-blue-50/50 space-y-2">
+            <label class="font-bold text-slate-700 block border-b pb-1">Productores Armados de la Selección:</label>
+            <div id="resumen-productores-armados" class="space-y-1 text-xs font-semibold text-slate-800">
+              <p class="text-slate-400 italic">Selecciona folios y productores arriba...</p>
+            </div>
+            <div class="text-right font-black text-blue-900 border-t pt-1">
+              Total Cajas Consolidadas: <span id="repa-total-cajas">0</span> cj
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Cámara Destino</label>
+              <select id="repa-camara" class="w-full border rounded-lg p-2 bg-white"></select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Posición Destino</label>
+              <select id="repa-posicion" class="w-full border rounded-lg p-2 bg-white"></select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Nuevo Calibre</label>
+              <input type="text" id="repa-calibre" placeholder="Ej: 100/113" oninput="this.value = this.value.toUpperCase()" class="w-full border rounded-lg p-2 bg-slate-50 uppercase">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Nuevo Envase</label>
+              <input type="text" id="repa-envase" placeholder="Ej: Master" oninput="this.value = this.value.toUpperCase()" class="w-full border rounded-lg p-2 bg-slate-50 uppercase">
+            </div>
+          </div>
+          <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg text-sm shadow">Consolidar y Generar Tarja</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- TAB 4: INVENTARIO Y REPORTES -->
+    <div id="tab-inv" class="tab-content hidden space-y-6 no-print">
+      
+      <!-- INVENTARIO COMPLETO -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-3 border-b pb-2">
+          <h2 class="text-sm font-bold">Inventario General Activo</h2>
+          <button onclick="exportarExcelInventario()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow">
+            📊 Exportar Inventario (Excel)
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-100 text-slate-700 font-bold uppercase">
+              <tr>
+                <th class="p-2">Tipo</th>
+                <th class="p-2">Folio</th>
+                <th class="p-2">Productor(es) / Cajas</th>
+                <th class="p-2">Ubicación</th>
+                <th class="p-2">Total Cajas</th>
+                <th class="p-2">Cal/Env/Var</th>
+                <th class="p-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-inventario" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- DISPONIBLE PARA REPALETIZAJES -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-3 border-b pb-2">
+          <h2 class="text-sm font-bold text-blue-900">📦 Disponibles para Realizar Repaletizajes</h2>
+          <span id="badge-disponibles-repa" class="bg-blue-100 text-blue-800 font-black px-2 py-0.5 rounded text-xs">0 pallets</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-blue-50 text-blue-900 font-bold uppercase">
+              <tr>
+                <th class="p-2">Folio</th>
+                <th class="p-2">Ubicación</th>
+                <th class="p-2">Cajas Disponibles</th>
+                <th class="p-2">Productores</th>
+                <th class="p-2">Atributos</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-disponibles-repa" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- HISTORIAL DESPACHADOS -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-3 border-b pb-2">
+          <h2 class="text-sm font-bold text-amber-900">🚚 Historial General de Pallets Despachados a Cámara</h2>
+          <button onclick="exportarExcelDespachos()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow">
+            📊 Exportar Despachos (Excel)
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-amber-50 text-amber-900 font-bold uppercase">
+              <tr>
+                <th class="p-2">Folio Pallet (20261)</th>
+                <th class="p-2">Última Ubicación</th>
+                <th class="p-2">Total Cajas Despachadas</th>
+                <th class="p-2">Productores</th>
+                <th class="p-2">Fecha/Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-despachados" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL TARJA -->
+  <div id="modal-tarja" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 z-50">
+    <div class="bg-white rounded-xl max-w-lg w-full p-5 relative border border-slate-300" id="tarja-print">
+      <div class="border-b-2 border-slate-900 pb-2 mb-3 flex justify-between items-start">
+        <div>
+          <h2 class="text-base font-black text-slate-900">TARJA DE REPALETIZAJE</h2>
+          <p class="text-[10px] font-bold text-blue-700">FRIGORÍFICO SM SERVICE</p>
+        </div>
+        <div class="text-right">
+          <span id="tarja-codigo" class="text-xs font-bold bg-slate-900 text-white px-2 py-0.5 rounded"></span>
+        </div>
+      </div>
+      <div id="tarja-contenido" class="text-xs space-y-3"></div>
+      <div class="mt-4 flex justify-end gap-2 no-print">
+        <button onclick="window.print()" class="bg-slate-900 text-white font-bold px-3 py-2 rounded-lg text-xs">🖨️ Imprimir</button>
+        <button onclick="cerrarTarja()" class="bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-lg text-xs">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CAMARAS = ['Cámara 1', 'Cámara 4', 'Cámara 7', 'Cámara 8'];
+    const POSICIONES = Array.from({ length: 110 }, (_, i) => `B${Math.floor(i/10)+1}-P${(i%10)+1}`);
+    const TOTAL_FOLIOS = 5000;
+
+    let pallets = JSON.parse(localStorage.getItem('sm_pallets') || '[]');
+    let foliosAgotados = JSON.parse(localStorage.getItem('sm_agotados') || '[]');
+    let correlativoNuevo = Number(localStorage.getItem('sm_corr_nuevo') || 1);
+    let correlativoSaldo = Number(localStorage.getItem('sm_corr_saldo') || 1);
+
+    let camaraActual = 'Cámara 1';
+    let seleccionadosRepa = {};
+
+    function id(str) { return document.getElementById(str); }
+
+    function soloNumeros(input) {
+      input.value = input.value.replace(/[^0-9]/g, '');
+    }
+
+    function esPalletCompleto20261(codigo) {
+      return codigo && codigo.startsWith('20261');
+    }
+
+    function init() {
+      const selectCamIng = id('ing-camara');
+      const selectCamRep = id('repa-camara');
+      CAMARAS.forEach(c => {
+        selectCamIng.add(new Option(c, c));
+        selectCamRep.add(new Option(c, c));
+      });
+
+      const selectPosIng = id('ing-posicion');
+      const selectPosRep = id('repa-posicion');
+      POSICIONES.forEach(p => {
+        selectPosIng.add(new Option(p, p));
+        selectPosRep.add(new Option(p, p));
+      });
+
+      agregarFilaProductorIngreso();
+      actualizarContadores();
+      renderMapaCamarasButtons();
+      renderMapa();
+    }
+
+    function agregarFilaProductorIngreso() {
+      const cont = id('contenedor-productores-ingreso');
+      const div = document.createElement('div');
+      div.className = 'flex gap-2 items-center fila-productor-ingreso';
+      div.innerHTML = `
+        <input type="text" inputmode="numeric" placeholder="N° Productor (Solo Números)" oninput="soloNumeros(this)" class="ing-prod-nombre w-2/3 border rounded p-1.5 text-xs bg-white font-bold" required>
+        <input type="number" min="1" placeholder="Cajas" oninput="calcularTotalCajasIngreso()" class="ing-prod-cajas w-1/3 border rounded p-1.5 text-xs bg-white" required>
+        <button type="button" onclick="eliminarFilaProductor(this)" class="text-rose-600 font-black px-1">✕</button>
+      `;
+      cont.appendChild(div);
+      calcularTotalCajasIngreso();
+    }
+
+    function calcularTotalCajasIngreso() {
+      const inputs = document.querySelectorAll('.ing-prod-cajas');
+      let total = 0;
+      inputs.forEach(inp => total += Number(inp.value || 0));
+      id('ing-total-cajas').innerText = total;
+    }
+
+    function eliminarFilaProductor(btn) {
+      const cont = id('contenedor-productores-ingreso');
+      if (cont.children.length > 1) {
+        btn.parentElement.remove();
+        calcularTotalCajasIngreso();
+      } else {
+        alert('Debes registrar al menos un productor.');
+      }
+    }
+
+    function actualizarContadores() {
+      const dispNuevo = TOTAL_FOLIOS - (correlativoNuevo - 1);
+      const dispSaldo = TOTAL_FOLIOS - (correlativoSaldo - 1);
+      id('info-folios-nuevo').innerText = dispNuevo >= 0 ? dispNuevo : 0;
+      id('info-folios-saldo').innerText = dispSaldo >= 0 ? dispSaldo : 0;
+    }
+
+    function generarAutoFolioNuevo() {
+      if (correlativoNuevo > TOTAL_FOLIOS) return alert('Límite de folios automáticos alcanzado (20261).');
+      id('repa-codigo').value = `20261${correlativoNuevo.toString().padStart(5, '0')}`;
+    }
+
+    function generarAutoFolioSaldo() {
+      if (correlativoSaldo > TOTAL_FOLIOS) return alert('Límite de folios automáticos alcanzado (RP).');
+      id('repa-codigo').value = `RP${correlativoSaldo.toString().padStart(8, '0')}`;
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('bg-blue-600', 'text-white');
+        el.classList.add('bg-slate-100', 'text-slate-600');
+      });
+
+      id(`tab-${tab}`).classList.remove('hidden');
+      id(`btn-${tab}`).classList.remove('bg-slate-100', 'text-slate-600');
+      id(`btn-${tab}`).classList.add('bg-blue-600', 'text-white');
+
+      if (tab === 'mapa') renderMapa();
+      if (tab === 'repa') renderRepaletizajeList();
+      if (tab === 'inv') renderInventarioYReportes();
+    }
+
+    function guardarIngreso(e) {
+      e.preventDefault();
+      const cod = id('ing-codigo').value.trim().toUpperCase();
+
+      if (cod.length !== 10) return alert('El código debe tener exactamente 10 caracteres.');
+      if (pallets.some(p => p.codigo === cod) || foliosAgotados.some(f => f.codigo === cod)) {
+        return alert('Este folio ya existe en el sistema.');
+      }
+
+      const filasProd = document.querySelectorAll('.fila-productor-ingreso');
+      let productores = [];
+      let totalCajas = 0;
+
+      filasProd.forEach(f => {
+        const nom = f.querySelector('.ing-prod-nombre').value.trim();
+        const cj = Number(f.querySelector('.ing-prod-cajas').value);
+        if (nom && cj > 0) {
+          productores.push({ nombre: nom, cajas: cj });
+          totalCajas += cj;
+        }
+      });
+
+      if (productores.length === 0 || totalCajas === 0) {
+        return alert('Ingresa al menos un productor válido con cajas.');
+      }
+
+      const nuevo = {
+        id: Date.now().toString(),
+        codigo: cod,
+        productores: productores,
+        camara: id('ing-camara').value,
+        posicion: id('ing-posicion').value,
+        calibre: id('ing-calibre').value.trim().toUpperCase(),
+        cajas: totalCajas,
+        envase: id('ing-envase').value.trim().toUpperCase(),
+        variedad: id('ing-variedad').value.trim().toUpperCase(),
+        origenesDetalle: []
+      };
+
+      pallets.push(nuevo);
+      localStorage.setItem('sm_pallets', JSON.stringify(pallets));
+      
+      alert(`Folio ${cod} guardado con éxito (${totalCajas} cajas).`);
+      id('ing-codigo').value = '';
+      id('contenedor-productores-ingreso').innerHTML = '';
+      agregarFilaProductorIngreso();
+      id('ing-calibre').value = '';
+      id('ing-envase').value = '';
+      id('ing-variedad').value = '';
+    }
+
+    function renderMapaCamarasButtons() {
+      id('camaras-selector').innerHTML = CAMARAS.map(c => 
+        `<button onclick="setCamaraMapa('${c}')" class="px-2.5 py-1 rounded text-xs font-bold ${camaraActual === c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}">${c}</button>`
+      ).join('');
+    }
+
+    function setCamaraMapa(c) {
+      camaraActual = c;
+      renderMapaCamarasButtons();
+      renderMapa();
+    }
+
+    function renderMapa() {
+      id('grid-mapa').innerHTML = POSICIONES.map(pos => {
+        const items = pallets.filter(p => p.camara === camaraActual && p.posicion === pos);
+        const totalCajas = items.reduce((acc, p) => acc + p.cajas, 0);
+        const bg = totalCajas > 0 ? 'bg-blue-100 border-blue-300 text-blue-900' : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+        return `
+          <div class="p-1 rounded border text-center ${bg}">
+            <div class="text-[8px] font-bold opacity-70">${pos}</div>
+            <div class="text-xs font-black">${totalCajas > 0 ? totalCajas + ' cj' : 'Vacío'}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filtrarFoliosOrigen() {
+      renderRepaletizajeList();
+    }
+
+    function renderRepaletizajeList() {
+      const cont = id('lista-origenes');
+      const filtro = (id('buscar-folio-origen')?.value || '').trim().toUpperCase();
+
+      if (pallets.length === 0) {
+        cont.innerHTML = '<p class="text-slate-400 italic">No hay pallets activos para repaletizar.</p>';
+        actualizarResumenRepa();
+        return;
+      }
+
+      const listaFiltrada = pallets.filter(p => p.codigo.includes(filtro));
+
+      if (listaFiltrada.length === 0) {
+        cont.innerHTML = '<p class="text-slate-400 italic">No se encontraron folios con esa búsqueda.</p>';
+        actualizarResumenRepa();
+        return;
+      }
+
+      cont.innerHTML = listaFiltrada.map(p => {
+        const isChecked = seleccionadosRepa[p.id] !== undefined;
+        const esCompleto = esPalletCompleto20261(p.codigo);
+
+        return `
+          <div class="p-2.5 rounded-lg border ${isChecked ? 'bg-blue-50 border-blue-300' : 'bg-slate-50 border-slate-200'} flex flex-col gap-1.5">
+            <div class="flex justify-between items-center">
+              <label class="font-bold flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleOrigen('${p.id}')" class="w-4 h-4 rounded text-blue-600">
+                <span class="text-sm font-black text-slate-900">${p.codigo}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${esCompleto ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}">
+                  ${esCompleto ? 'Pallet 20261' : 'Saldo (RP)'}
+                </span>
+              </label>
+              <div class="flex items-center gap-2">
+                ${esCompleto ? `
+                  <button onclick="despacharFolio('${p.id}')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2 py-0.5 rounded text-[10px]" title="Despachar Pallet Completo">
+                    🚚 Despachar
+                  </button>
+                ` : `
+                  <span class="text-[10px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded cursor-not-allowed" title="Solo pallets completos 20261 pueden ser despachados">
+                    No despachable (Saldo)
+                  </span>
+                `}
+                <span class="font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[11px]">${p.cajas} cj total</span>
+              </div>
+            </div>
+
+            <!-- Datos visibles del folio origen -->
+            <div class="grid grid-cols-2 gap-1 text-[11px] font-semibold text-slate-600 bg-white/70 p-1.5 rounded border border-slate-200/80">
+              <div>📍 <b>Ubicación:</b> ${p.camara} (${p.posicion})</div>
+              <div>📐 <b>Calibre:</b> ${p.calibre || 'S/C'}</div>
+              <div>📦 <b>Envase:</b> ${p.envase || 'S/I'}</div>
+              <div>🍎 <b>Variedad:</b> ${p.variedad || 'S/I'}</div>
+            </div>
+
+            <!-- Desglose de productores al estar marcado -->
+            ${isChecked ? `
+              <div class="bg-white p-2 rounded border border-slate-200 space-y-1.5 mt-1">
+                <span class="font-bold text-slate-600 text-[11px] block border-b pb-0.5">Productores en este folio:</span>
+                ${p.productores.map(pr => {
+                  const checkedProd = seleccionadosRepa[p.id][pr.nombre] !== undefined;
+                  const valCajas = checkedProd ? seleccionadosRepa[p.id][pr.nombre] : pr.cajas;
+                  return `
+                    <div class="flex justify-between items-center text-xs">
+                      <label class="flex items-center gap-1.5 font-semibold cursor-pointer">
+                        <input type="checkbox" ${checkedProd ? 'checked' : ''} onchange="toggleProductorOrigen('${p.id}', '${pr.nombre}', ${pr.cajas})" class="w-3.5 h-3.5 rounded text-blue-600">
+                        <span>Prod: ${pr.nombre} <span class="text-slate-400">(${pr.cajas} cj disp)</span></span>
+                      </label>
+                      ${checkedProd ? `
+                        <div class="flex items-center gap-1">
+                          <span class="text-[10px] text-slate-500">Usar:</span>
+                          <input type="number" max="${pr.cajas}" min="1" value="${valCajas}" onchange="actualizarCajasProductor('${p.id}', '${pr.nombre}', this.value, ${pr.cajas})" class="w-16 border-2 border-blue-400 text-center font-black bg-white rounded p-0.5 text-xs">
+                        </div>
+                      ` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      actualizarResumenRepa();
+    }
+
+    function despacharFolio(pId) {
+      const index = pallets.findIndex(p => p.id === pId);
+      if (index === -1) return;
+
+      const p = pallets[index];
+
+      // VALIDACIÓN RESTRICTIVA: Solo pallets 20261
+      if (!esPalletCompleto20261(p.codigo)) {
+        return alert('Solo se pueden despachar pallets completos con la nomenclatura 20261. Los saldos (RP) deben consolidarse primero.');
+      }
+
+      if (confirm(`¿Confirmas el despacho del pallet completo ${p.codigo} (${p.cajas} cajas) a cámara de despacho?`)) {
+        delete seleccionadosRepa[pId];
+        
+        const registroDespacho = { 
+          ...p, 
+          motivo: 'Despachado a Cámara',
+          fechaDespacho: new Date().toLocaleString('es-CL')
+        };
+
+        foliosAgotados.push(registroDespacho);
+        pallets.splice(index, 1);
+
+        localStorage.setItem('sm_pallets', JSON.stringify(pallets));
+        localStorage.setItem('sm_agotados', JSON.stringify(foliosAgotados));
+
+        renderRepaletizajeList();
+        renderInventarioYReportes();
+        renderMapa();
+        alert(`El pallet completo ${p.codigo} fue registrado como Despachado.`);
+      }
+    }
+
+    function toggleOrigen(pId) {
+      const p = pallets.find(x => x.id === pId);
+      if (!p) return;
+
+      if (seleccionadosRepa[pId] !== undefined) {
+        delete seleccionadosRepa[pId];
+      } else {
+        seleccionadosRepa[pId] = {};
+        p.productores.forEach(pr => {
+          seleccionadosRepa[pId][pr.nombre] = pr.cajas;
+        });
+      }
+      renderRepaletizajeList();
+    }
+
+    function toggleProductorOrigen(pId, prodNom, maxCajas) {
+      if (!seleccionadosRepa[pId]) {
+        seleccionadosRepa[pId] = {};
+      }
+
+      if (seleccionadosRepa[pId][prodNom] !== undefined) {
+        delete seleccionadosRepa[pId][prodNom];
+        if (Object.keys(seleccionadosRepa[pId]).length === 0) {
+          delete seleccionadosRepa[pId];
+        }
+      } else {
+        seleccionadosRepa[pId][prodNom] = maxCajas;
+      }
+      renderRepaletizajeList();
+    }
+
+    function actualizarCajasProductor(pId, prodNom, val, maxCajas) {
+      let num = Number(val);
+      if (num > maxCajas) num = maxCajas;
+      if (num < 1) num = 1;
+      if (seleccionadosRepa[pId]) {
+        seleccionadosRepa[pId][prodNom] = num;
+      }
+      actualizarResumenRepa();
+    }
+
+    function actualizarResumenRepa() {
+      const resumenDiv = id('resumen-productores-armados');
+      let consolidadoProds = {};
+      let totalCajas = 0;
+
+      Object.keys(seleccionadosRepa).forEach(pId => {
+        const prodsObj = seleccionadosRepa[pId];
+        Object.keys(prodsObj).forEach(pNom => {
+          const cj = Number(prodsObj[pNom]);
+          consolidadoProds[pNom] = (consolidadoProds[pNom] || 0) + cj;
+          totalCajas += cj;
+        });
+      });
+
+      const keys = Object.keys(consolidadoProds);
+      if (keys.length === 0) {
+        resumenDiv.innerHTML = '<p class="text-slate-400 italic">Selecciona folios y productores arriba...</p>';
+      } else {
+        resumenDiv.innerHTML = keys.map(k => `
+          <div class="flex justify-between items-center bg-white p-1.5 rounded border border-blue-200">
+            <span>Productor N° <b>${k}</b></span>
+            <span class="font-black text-blue-700">${consolidadoProds[k]} cj</span>
+          </div>
+        `).join('');
+      }
+
+      id('repa-total-cajas').innerText = totalCajas;
+    }
+
+    function procesarRepaletizaje(e) {
+      e.preventDefault();
+      const nuevoCod = id('repa-codigo').value.trim().toUpperCase();
+
+      if (nuevoCod.length !== 10) return alert('El código de destino debe contener exactamente 10 caracteres.');
+
+      let consolidadoProds = {};
+      let totalCajasMover = 0;
+      let origenesDetalle = [];
+
+      const pIds = Object.keys(seleccionadosRepa);
+      if (pIds.length === 0) return alert('Selecciona al menos un folio y productor de origen.');
+
+      pIds.forEach(pId => {
+        const pIndex = pallets.findIndex(p => p.id === pId);
+        if (pIndex !== -1) {
+          const orig = pallets[pIndex];
+          const prodsObj = seleccionadosRepa[pId];
+          let cajasMoverTotalFolio = 0;
+
+          Object.keys(prodsObj).forEach(pNom => {
+            const mover = Number(prodsObj[pNom]);
+            if (mover > 0) {
+              consolidadoProds[pNom] = (consolidadoProds[pNom] || 0) + mover;
+              totalCajasMover += mover;
+              cajasMoverTotalFolio += mover;
+
+              const prodOrig = orig.productores.find(pr => pr.nombre === pNom);
+              if (prodOrig) {
+                prodOrig.cajas -= mover;
+              }
+            }
+          });
+
+          orig.productores = orig.productores.filter(pr => pr.cajas > 0);
+          orig.cajas -= cajasMoverTotalFolio;
+
+          origenesDetalle.push(`${orig.codigo} (${cajasMoverTotalFolio} cj)`);
+
+          if (orig.cajas <= 0) {
+            foliosAgotados.push({ ...orig, motivo: `Consolidado en ${nuevoCod}` });
+            pallets.splice(pIndex, 1);
+          }
+        }
+      });
+
+      let productoresDestino = Object.keys(consolidadoProds).map(k => ({
+        nombre: k,
+        cajas: consolidadoProds[k]
+      }));
+
+      if (productoresDestino.length === 0 || totalCajasMover === 0) {
+        return alert('No hay cajas seleccionadas para consolidar.');
+      }
+
+      const nuevoPallet = {
+        id: Date.now().toString(),
+        codigo: nuevoCod,
+        productores: productoresDestino,
+        camara: id('repa-camara').value,
+        posicion: id('repa-posicion').value,
+        calibre: id('repa-calibre').value.trim().toUpperCase(),
+        cajas: totalCajasMover,
+        envase: id('repa-envase').value.trim().toUpperCase(),
+        origenesDetalle: origenesDetalle
+      };
+
+      pallets.push(nuevoPallet);
+
+      const folioEsperadoNuevo = `20261${correlativoNuevo.toString().padStart(5, '0')}`;
+      if (nuevoCod === folioEsperadoNuevo) {
+        correlativoNuevo++;
+        localStorage.setItem('sm_corr_nuevo', correlativoNuevo.toString());
+      }
+
+      const folioEsperadoSaldo = `RP${correlativoSaldo.toString().padStart(8, '0')}`;
+      if (nuevoCod === folioEsperadoSaldo) {
+        correlativoSaldo++;
+        localStorage.setItem('sm_corr_saldo', correlativoSaldo.toString());
+      }
+
+      localStorage.setItem('sm_pallets', JSON.stringify(pallets));
+      localStorage.setItem('sm_agotados', JSON.stringify(foliosAgotados));
+
+      actualizarContadores();
+      mostrarTarjaModal(nuevoPallet);
+      seleccionadosRepa = {};
+      id('repa-codigo').value = '';
+    }
+
+    function mostrarTarjaModal(p) {
+      id('tarja-codigo').innerText = `FOLIO: ${p.codigo}`;
+      const prodsHTML = p.productores ? p.productores.map(pr => `<li><b>N° ${pr.nombre}:</b> ${pr.cajas} cj</li>`).join('') : '<li>S/I</li>';
+
+      id('tarja-contenido').innerHTML = `
+        <div class="grid grid-cols-2 gap-2 bg-slate-50 p-2 rounded border mb-2">
+          <p><b>Ubicación:</b> ${p.camara} (${p.posicion})</p>
+          <p><b>Cajas Totales:</b> ${p.cajas} cj</p>
+          <p><b>Calibre:</b> ${p.calibre || 'S/C'}</p>
+          <p><b>Envase:</b> ${p.envase || 'S/I'}</p>
+        </div>
+        <div class="border-t pt-2">
+          <b>Desglose de Productores:</b>
+          <ul class="list-disc pl-4 text-slate-700 mt-1">${prodsHTML}</ul>
+        </div>
+        ${p.origenesDetalle && p.origenesDetalle.length > 0 ? `
+          <div class="border-t pt-2 mt-2">
+            <b>Folios Origen Consolidados:</b>
+            <p class="text-slate-600">${p.origenesDetalle.join(', ')}</p>
+          </div>
+        ` : ''}
+      `;
+      id('modal-tarja').classList.remove('hidden');
+    }
+
+    function reimprimirTarja(idPallet) {
+      const p = pallets.find(x => x.id === idPallet);
+      if (p) mostrarTarjaModal(p);
+    }
+
+    function cerrarTarja() {
+      id('modal-tarja').classList.add('hidden');
+      switchTab('inv');
+    }
+
+    function renderInventarioYReportes() {
+      // 1. Inventario General
+      id('tabla-inventario').innerHTML = pallets.length === 0 ? 
+        '<tr><td colspan="7" class="p-3 text-center text-slate-400 italic">No hay registros en inventario.</td></tr>' :
+        pallets.map(p => {
+          const detProds = p.productores ? p.productores.map(pr => `Prod ${pr.nombre} (${pr.cajas}cj)`).join(', ') : '-';
+          const esCompleto = esPalletCompleto20261(p.codigo);
+          return `
+            <tr>
+              <td class="p-2">
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${esCompleto ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}">
+                  ${esCompleto ? '20261' : 'Saldo RP'}
+                </span>
+              </td>
+              <td class="p-2 font-black text-blue-600">${p.codigo}</td>
+              <td class="p-2 font-medium">${detProds}</td>
+              <td class="p-2">${p.camara} - ${p.posicion}</td>
+              <td class="p-2 font-bold">${p.cajas} cj</td>
+              <td class="p-2 text-[11px]">${p.calibre || '-'}/${p.envase || '-'}/${p.variedad || '-'}</td>
+              <td class="p-2 text-right space-x-1">
+                <button onclick="reimprimirTarja('${p.id}')" class="bg-slate-800 text-white font-bold px-2 py-1 rounded text-[10px] hover:bg-slate-900">
+                  🖨️ Tarja
+                </button>
+                ${esCompleto ? `
+                  <button onclick="despacharFolio('${p.id}')" class="bg-amber-500 text-white font-bold px-2 py-1 rounded text-[10px] hover:bg-amber-600">
+                    🚚 Despachar
+                  </button>
+                ` : ''}
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+      // 2. Disponibles para Repaletizaje (Todos los pallets en inventario activo)
+      id('badge-disponibles-repa').innerText = `${pallets.length} pallets`;
+      id('tabla-disponibles-repa').innerHTML = pallets.length === 0 ?
+        '<tr><td colspan="5" class="p-3 text-center text-slate-400 italic">Sin materiales disponibles para repaletizar.</td></tr>' :
+        pallets.map(p => `
+          <tr>
+            <td class="p-2 font-black text-slate-800">${p.codigo}</td>
+            <td class="p-2 font-semibold text-slate-600">${p.camara} (${p.posicion})</td>
+            <td class="p-2 font-black text-blue-700">${p.cajas} cj</td>
+            <td class="p-2 font-medium">${p.productores.map(pr => `${pr.nombre}:${pr.cajas}cj`).join(' | ')}</td>
+            <td class="p-2 text-slate-500">${p.calibre || 'S/C'} / ${p.envase || 'S/I'}</td>
+          </tr>
+        `).join('');
+
+      // 3. Historial de Despachados
+      const despachados = foliosAgotados.filter(f => f.motivo && f.motivo.includes('Despachado'));
+      id('tabla-despachados').innerHTML = despachados.length === 0 ?
+        '<tr><td colspan="5" class="p-3 text-center text-slate-400 italic">No hay historial de pallets despachados.</td></tr>' :
+        despachados.map(d => `
+          <tr>
+            <td class="p-2 font-black text-amber-700">${d.codigo}</td>
+            <td class="p-2 font-medium">${d.camara || '-'} (${d.posicion || '-'})</td>
+            <td class="p-2 font-black">${d.cajas} cj</td>
+            <td class="p-2">${d.productores ? d.productores.map(pr => `${pr.nombre}:${pr.cajas}cj`).join(' | ') : '-'}</td>
+            <td class="p-2 text-[11px] text-slate-500">${d.fechaDespacho || 'Despachado'}</td>
+          </tr>
+        `).join('');
+    }
+
+    // EXPORTACIÓN A EXCEL (INVENTARIO)
+    function exportarExcelInventario() {
+      if (pallets.length === 0) return alert('No hay datos en inventario para exportar.');
+
+      const datosExcel = pallets.map(p => ({
+        'Tipo Folio': esPalletCompleto20261(p.codigo) ? 'Pallet Completo (20261)' : 'Saldo (RP)',
+        'Código Folio': p.codigo,
+        'Cámara': p.camara,
+        'Posición': p.posicion,
+        'Cajas Totales': p.cajas,
+        'Calibre': p.calibre || '',
+        'Envase': p.envase || '',
+        'Variedad': p.variedad || '',
+        'Detalle Productores': p.productores ? p.productores.map(pr => `Prod ${pr.nombre}: ${pr.cajas}cj`).join('; ') : ''
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(datosExcel);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Inventario_Activo');
+      XLSX.writeFile(wb, `Inventario_SM_Service_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    // EXPORTACIÓN A EXCEL (DESPACHOS)
+    function exportarExcelDespachos() {
+      const despachados = foliosAgotados.filter(f => f.motivo && f.motivo.includes('Despachado'));
+      if (despachados.length === 0) return alert('No hay historial de despachos para exportar.');
+
+      const datosExcel = despachados.map(d => ({
+        'Código Folio': d.codigo,
+        'Cámara': d.camara || '',
+        'Posición': d.posicion || '',
+        'Cajas Despachadas': d.cajas,
+        'Productores': d.productores ? d.productores.map(pr => `Prod ${pr.nombre}: ${pr.cajas}cj`).join('; ') : '',
+        'Fecha / Detalle': d.fechaDespacho || d.motivo
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(datosExcel);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Pallets_Despachados');
+      XLSX.writeFile(wb, `Despachos_SM_Service_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    function clearAllData() {
+      if (confirm('¿Deseas reiniciar todos los registros y secuencias de folios?')) {
+        localStorage.clear();
+        pallets = [];
+        foliosAgotados = [];
+        correlativoNuevo = 1;
+        correlativoSaldo = 1;
+        actualizarContadores();
+        alert('Datos y secuencias reiniciados.');
+        switchTab('ingreso');
+      }
+    }
+
+    window.addEventListener('online', actualizarEstadoConexion);
+    window.addEventListener('offline', actualizarEstadoConexion);
+    function actualizarEstadoConexion(){
+      const el=id('offline-status');
+      if(!el) return;
+      el.textContent = navigator.onLine ? '● CONEXIÓN DISPONIBLE · DATOS LOCALES' : '● MODO OFFLINE · DATOS GUARDADOS EN ESTE TELÉFONO';
+      el.className = navigator.onLine ? 'mb-2 text-[10px] font-bold rounded-full px-2 py-1 inline-block bg-blue-100 text-blue-700' : 'mb-2 text-[10px] font-bold rounded-full px-2 py-1 inline-block bg-emerald-100 text-emerald-700';
+    }
+    window.addEventListener('load',()=>{ actualizarEstadoConexion(); if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{}); init(); });
+  </script>
+</body>
+</html>
